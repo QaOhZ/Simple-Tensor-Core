@@ -1,4 +1,5 @@
 `timescale 1ns/1ps
+
 module tb_simple_tensor_core;
 
     reg clk = 0;
@@ -12,10 +13,36 @@ module tb_simple_tensor_core;
     integer i, j, k;
 
     simple_tensor_core dut (
-        .clk(clk), .reset(reset), .start(start), .mode(mode),
-        .A_in(A_in), .B_in(B_in), .D_in(D_in),
-        .E_out(E_out), .valid(valid), .busy(busy)
-    );
+            .clk(clk), .reset(reset), .start(start), .mode(mode),
+    
+            .A00(A_in[7:0]),     .A01(A_in[15:8]),    .A02(A_in[23:16]),   .A03(A_in[31:24]),
+            .A10(A_in[39:32]),   .A11(A_in[47:40]),   .A12(A_in[55:48]),   .A13(A_in[63:56]),
+            .A20(A_in[71:64]),   .A21(A_in[79:72]),   .A22(A_in[87:80]),   .A23(A_in[95:88]),
+            .A30(A_in[103:96]),  .A31(A_in[111:104]), .A32(A_in[119:112]), .A33(A_in[127:120]),
+    
+            .B00(B_in[7:0]),     .B01(B_in[15:8]),    .B02(B_in[23:16]),   .B03(B_in[31:24]),
+            .B10(B_in[39:32]),   .B11(B_in[47:40]),   .B12(B_in[55:48]),   .B13(B_in[63:56]),
+            .B20(B_in[71:64]),   .B21(B_in[79:72]),   .B22(B_in[87:80]),   .B23(B_in[95:88]),
+            .B30(B_in[103:96]),  .B31(B_in[111:104]), .B32(B_in[119:112]), .B33(B_in[127:120]),
+    
+            .D00(D_in[7:0]),     .D01(D_in[15:8]),    .D02(D_in[23:16]),   .D03(D_in[31:24]),
+            .D10(D_in[39:32]),   .D11(D_in[47:40]),   .D12(D_in[55:48]),   .D13(D_in[63:56]),
+            .D20(D_in[71:64]),   .D21(D_in[79:72]),   .D22(D_in[87:80]),   .D23(D_in[95:88]),
+            .D30(D_in[103:96]),  .D31(D_in[111:104]), .D32(D_in[119:112]), .D33(D_in[127:120]),
+    
+            .C00(), .C01(), .C02(), .C03(),
+            .C10(), .C11(), .C12(), .C13(),
+            .C20(), .C21(), .C22(), .C23(),
+            .C30(), .C31(), .C32(), .C33(),
+    
+            .E00(E_out[19:0]),   .E01(E_out[39:20]),   .E02(E_out[59:40]),   .E03(E_out[79:60]),
+            .E10(E_out[99:80]),  .E11(E_out[119:100]), .E12(E_out[139:120]), .E13(E_out[159:140]),
+            .E20(E_out[179:160]),.E21(E_out[199:180]), .E22(E_out[219:200]), .E23(E_out[239:220]),
+            .E30(E_out[259:240]),.E31(E_out[279:260]), .E32(E_out[299:280]), .E33(E_out[319:300]),
+    
+            .valid(valid),
+            .busy(busy)
+        );
 
     initial begin
         $dumpfile("waveform.vcd");
@@ -106,31 +133,44 @@ module tb_simple_tensor_core;
         input [1:0] test_mode;
         input [255:0] label;
         integer i2, j2, k2;
+        integer timeout;
         reg [19:0] got;
         begin
             mode = test_mode;
             pack_inputs();
             compute_expected();
+            
             @(negedge clk);
             start = 1;
             @(negedge clk);
             start = 0;
-            wait (valid == 1);
-            @(negedge clk);
             
-            print_matrix(label);
+            timeout = 0;
+            while (valid == 0 && timeout < 200) begin
+                @(negedge clk);
+                timeout = timeout + 1;
+            end
+            
+            if (timeout == 200) begin
+                $display("TIMEOUT ERROR: [%0s] Core stalled, valid signal never asserted.", label);
+                errors = errors + 1;
+            end else begin
+                @(negedge clk);
+                
+                print_matrix(label);
 
-            for (i2 = 0; i2 < 4; i2 = i2 + 1)
-                for (j2 = 0; j2 < 4; j2 = j2 + 1) begin
-                    k2 = 4*i2 + j2;
-                    got = E_out[20*k2 +: 20];
-                    if (got !== expected[i2][j2]) begin
-                        errors = errors + 1;
-                        $display("FAIL [%0s] E[%0d][%0d]: got=%0d expected=%0d",
-                                  label, i2, j2, got, expected[i2][j2]);
+                for (i2 = 0; i2 < 4; i2 = i2 + 1)
+                    for (j2 = 0; j2 < 4; j2 = j2 + 1) begin
+                        k2 = 4*i2 + j2;
+                        got = E_out[20*k2 +: 20];
+                        if (got !== expected[i2][j2][19:0]) begin
+                            errors = errors + 1;
+                            $display("FAIL [%0s] E[%0d][%0d]: got=%0d expected=%0d",
+                                      label, i2, j2, got, expected[i2][j2][19:0]);
+                        end
                     end
-                end
-            $display("[%0s] done, valid asserted, checked 16 elements.", label);
+                $display("[%0s] done, valid asserted, checked 16 elements.", label);
+            end
         end
     endtask
 
@@ -167,6 +207,13 @@ module tb_simple_tensor_core;
             D[i][j] = 255;
         end
         run_and_check(2'b10, "8-bit-max");
+        
+        for (i=0;i<4;i=i+1) for (j=0;j<4;j=j+1) begin
+            A[i][j] = $urandom_range(0, 255);
+            B[i][j] = $urandom_range(0, 255);
+            D[i][j] = $urandom_range(0, 255);
+        end
+        run_and_check(2'b10, "8-bit-random");
 
         for (i=0;i<4;i=i+1) for (j=0;j<4;j=j+1) begin
             A[i][j] = (2*i+j) % 16; B[i][j] = (i+3*j) % 16; D[i][j] = j % 16;
@@ -193,31 +240,42 @@ module tb_simple_tensor_core;
             start = 1;
             @(negedge clk); start = 0;
 
-            wait (valid == 1);
-            @(negedge clk);
-            
-            print_matrix("spurious-start");
-            
-            for (i=0;i<4;i=i+1) for (j=0;j<4;j=j+1) begin
-                k = 4*i+j;
-                if (E_out[20*k +: 20] !== expected[i][j]) begin
-                    errors = errors + 1;
-                    $display("FAIL [spurious-start] E[%0d][%0d]: got=%0d expected=%0d",
-                              i, j, E_out[20*k +: 20], expected[i][j]);
-                end
+            i = 0;
+            while (valid == 0 && i < 200) begin
+                @(negedge clk);
+                i = i + 1;
             end
-            $display("[spurious-start] done -- confirms mid-operation start pulses are safely ignored.");
+            
+            if (i == 200) begin
+                $display("TIMEOUT ERROR: [spurious-start] Core stalled.");
+                errors = errors + 1;
+            end else begin
+                @(negedge clk);
+                print_matrix("spurious-start");
+                
+                for (i=0;i<4;i=i+1) for (j=0;j<4;j=j+1) begin
+                    k = 4*i+j;
+                    if (E_out[20*k +: 20] !== expected[i][j][19:0]) begin
+                        errors = errors + 1;
+                        $display("FAIL [spurious-start] E[%0d][%0d]: got=%0d expected=%0d",
+                                  i, j, E_out[20*k +: 20], expected[i][j][19:0]);
+                    end
+                end
+                $display("[spurious-start] done -- confirms mid-operation start pulses are safely ignored.");
+            end
         end
 
         if (errors == 0)
             $display("\nALL TESTS PASSED");
         else
             $display("\n%0d MISMATCHES FOUND", errors);
-	
-	begin : custom_file_load
+    
+        begin : custom_file_load
             reg [255:0] filename;
             reg [7:0] file_mem [0:47];
             
+            for(i=0; i<48; i=i+1) file_mem[i] = 8'h00; 
+
             if ($value$plusargs("load=%s", filename)) begin
                 $display("\n>>> DYNAMIC I/O DETECTED: Loading from %0s <<<", filename);
                 $readmemh(filename, file_mem);
