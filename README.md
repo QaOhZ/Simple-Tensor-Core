@@ -329,7 +329,7 @@ endmodule
 
 **4×4 grid dataflow:**
 
-![Systolic Dataflow](systolic_dataflow.png)
+![Systolic Dataflow](figures/systolic_dataflow.png)
 
 ### 2.3 Phase 2: Hardware Data Formatting
 
@@ -949,67 +949,67 @@ All screenshots below are taken directly from Surfer while replaying the `.vcd` 
 
 **Figure 1 `adder_4bit`**
 
-![adder_4bit waveform](adder_4bit.png)
+![adder_4bit waveform](figures/adder_4bit.png)
 
 `tb_adder_4bit` drives `A`, `B` and an alternating `Cin` through the full input space while the DUT scope tree shows the four instantiated `full_adder` cells (`fa0`…`fa3`) that make up the ripple chain. `Sum` tracks `B` and wraps correctly from 15 back to 0, and `Cout` only rises for the specific `A+B+Cin` combinations that overflow 4 bits, confirming the ripple-carry adder's `Sum`/`Cout` against the reference model bit-for-bit.
 
 **Figure 2 `carry_adder_4bit`**
 
-![carry_adder_4bit waveform](carry_adder_4bit.png)
+![carry_adder_4bit waveform](figures/carry_adder_4bit.png)
 
 The same test bench and stimulus pattern applied to `carry_adder_4bit` instead. `Sum` and `Cout` line up cycle-for-cycle with Figure 1, confirming the two adder implementations are functionally identical even though their internal structure is completely different.
 
 **Figure 3 `multiplier_4bit`**
 
-![multiplier_4bit waveform](mult_4bit.png)
+![multiplier_4bit waveform](figures/mult_4bit.png)
 
 With `A` held at `0`, `Product` stays `0` regardless of `B` (covering the `0×N` boundary case). Once `A` becomes `1`, `Product` tracks `B` directly (`1×N = N`) as `B` sweeps `0`→`15`, a clean spot-check of the partial-product-and-add tree before it gets buried inside the `pe`.
 
 **Figure 4 `pe`**
 
-![pe waveform](pe.png)
+![pe waveform](figures/pe.png)
 
 A short stream of `(a_in, b_in)` pairs (`(0,0)`, `(2,3)`, `(4,5)`, `(1,1)`, `(0,0)`) is fed into the processing element. `sum_out` accumulates the running dot product each clock (`0 → 6 → 26 → 27 → 27`), matching `0·0 + 2·3 + 4·5 + 1·1 = 27`, while `a_out`/`b_out` show the one-cycle registered pass-through to the next cell in the grid.
 
 **Figure 5 `row_stagger`**
 
-![row_stagger waveform](row_stagger.png)
+![row_stagger waveform](figures/row_stagger.png)
 
 `row_data = 16'h4321` is parallel-loaded on the `start` pulse and then shifted out one nibble per clock: `a_out` sequences `1 → 2 → 3 → 4` before returning to `0`, confirming the shift register empties least-significant-nibble-first exactly as `mem_reuse_pipe` expects.
 
 **Figure 6 `mem_reuse_pipe`**
 
-![mem_reuse_pipe waveform](mem_reuse_pipe.png)
+![mem_reuse_pipe waveform](figures/mem_reuse_pipe.png)
 
 `A_flat = 64'h4444_3333_2222_1111` (row0 = `0x1111`, row1 = `0x2222`, row2 = `0x3333`, row3 = `0x4444`). After `start`, `a_edge0` (`DELAY = 0`) is the first to present its row's value, `a_edge1` (`DELAY = 1`) follows one clock later, then `a_edge2`, then `a_edge3`, confirming the `row_stagger #(.DELAY(n))` chain staggers row 0 → row 3 by exactly one cycle each, as required for the systolic timing in 2.3.
 
 **Figure 7 `systolic_4x4`**
 
-![systolic_4x4 waveform](systolic.png)
+![systolic_4x4 waveform](figures/systolic.png)
 
 Two back-to-back `start` pulses drive two independent test cases. The first uses distinct, "random-looking" `A_flat`/`B_flat` operands and every `c_ij` settles at a distinct value, confirming the systolic array against the golden software model element-by-element. The second test drives every nibble of `A_flat` and `B_flat` to `0xF` (`15`) and every `c_ij` settles to the identical sequence `0 → 225 → 450 → 675 → 900` — this is the "accumulate four `15×15` terms without saturation" boundary case from 3.3, and `900` sits comfortably under the `pe` accumulator's `4095` ceiling.
 
 **Figure 8  `matrix_add_4x4`**
 
-![matrix_add_4x4 waveform](matrix_add_4x4.png)
+![matrix_add_4x4 waveform](figures/matrix_add_4x4.png)
 
 `D_flat` is swept through boundary hex patterns (all-zero, all-`F`, an alternating `0x1` pattern, and `0x8` (mid-range)) while `C` is held at a fixed 12-bit value for each case. Every one of the 16 `e_ij` outputs tracks `c_ij + d_ij` in lock-step across all four cases, confirming `matrix_add_4x4`'s 16 parallel `adder_12bit` instances are wired correctly.
 
 **Figure 9 `tensor_module`**
 
-![tensor_module waveform](tensor_module.png)
+![tensor_module waveform](figures/tensor_module.png)
 
 Two `start` pulses again drive two test cases; the scope tree shows the `run_case` testbench task and the instantiated `DUT`. For the second test case, all 16 `got_ij` outputs settle to their golden-model expected values (`153, 115, 162, 262, 46, 86, 123, 198, 146, 75, 168, 154, 197, 80, 129, 211`), confirming the full `systolic_4x4 → matrix_add_4x4` pipeline computes `E = A×B + D` correctly.
 
 **Figure 10 `data_ctrl_unit`**
 
-![data_ctrl_unit waveform](data_ctrl_unit_FSM.png)
+![data_ctrl_unit waveform](figures/data_ctrl_unit_FSM.png)
 
 With `mode = 2'b10` (8-bit) and a single `start` pulse, `state` visibly loops `S_CORE_RESET(1) → S_RUN(2) → S_CAPTURE(3)` **four times** (once per `pass_idx` value `0, 1, 2, 3`) before finally advancing to `S_COMBINE(4)` and `S_DONE(5)` and returning to `S_IDLE(0)`. `core_reset` and `core_start` each pulse once per loop, `capture_en` pulses once per loop, and `combine_en` pulses exactly once, right before the single `valid` pulse.
 
 **Figure 11 `simple_tensor_core`**
 
-![simple_tensor_core waveform](tensor_core.png)
+![simple_tensor_core waveform](figures/tensor_core.png)
 
 Two back-to-back operations on the full top-level design: the first with `mode = 2'b01` (4-bit, single pass) completes with one `valid` pulse and a short `busy` window; the second with `mode = 2'b10` (8-bit) shows `pass_idx` counting `0 → 1 → 2 → 3` and `combine_en` pulsing once at the end of the fourth pass, with `E_out` only updating after that final `combine_en`.
 
