@@ -154,14 +154,8 @@ def format_matrix(mat, width=6, prefix="  "):
 def ensure_sim_compiled(sim_binary, project_dir):
     """Compiles the simulation binary if not present."""
     if not os.path.isfile(sim_binary):
-        print(f"{YELLOW}[*] Simulation binary '{os.path.basename(sim_binary)}' not found. Compiling with iverilog...{RESET}")
-        cmd = [
-            "iverilog",
-            "-o", sim_binary,
-            os.path.join(project_dir, "tensor_core.v"),
-            os.path.join(project_dir, "tb_tensor_core.v")
-        ]
-        res = subprocess.run(cmd, cwd=project_dir, capture_output=True, text=True)
+        print(f"{YELLOW}[*] Simulation binary '{os.path.basename(sim_binary)}' not found. Compiling via make...{RESET}")
+        res = subprocess.run(["make", os.path.basename(sim_binary)], cwd=project_dir, capture_output=True, text=True)
         if res.returncode != 0:
             print(f"{RED}[!] Compilation failed:{RESET}\n{res.stderr}")
             sys.exit(1)
@@ -220,7 +214,8 @@ def main():
     parser.add_argument("--sim-binary", default="./top_test", help="Path to compiled iverilog executable")
     args = parser.parse_args()
 
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    # Project directory is repository root (parent of scripts/)
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sim_binary = os.path.abspath(os.path.join(project_dir, args.sim_binary))
 
     print(f"\n{BOLD}{CYAN}==================================================================={RESET}")

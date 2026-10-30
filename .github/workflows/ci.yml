@@ -36,8 +36,8 @@ jobs:
           echo "==> Running MLP Preset Demo..."
           make demo
           echo "==> Running Edge Detection Kernel Preset..."
-          python3 demo_mlp_layer.py --preset=edge
+          python3 scripts/demo_mlp_layer.py --preset=edge
           echo "==> Running Identity Preset..."
-          python3 demo_mlp_layer.py --preset=identity
+          python3 scripts/demo_mlp_layer.py --preset=identity
           echo "==> Running Constrained Random Verification..."
-          python3 demo_mlp_layer.py --preset=random --seed=42
+          python3 scripts/demo_mlp_layer.py --preset=random --seed=42
