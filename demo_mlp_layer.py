@@ -168,9 +168,11 @@ def ensure_sim_compiled(sim_binary, project_dir):
         print(f"{GREEN}[+] Compilation successful.{RESET}\n")
 
 
-def run_hardware_sim(sim_binary, hex_path, project_dir):
+def run_hardware_sim(sim_binary, hex_path, project_dir, relu=False):
     """Executes the simulator with the dynamic hex stimulus."""
     cmd = [sim_binary, f"+load={hex_path}"]
+    if relu:
+        cmd.append("+relu")
     res = subprocess.run(cmd, cwd=project_dir, capture_output=True, text=True)
     if res.returncode != 0:
         print(f"{RED}[!] Simulator exited with code {res.returncode}:{RESET}\n{res.stderr}")
@@ -213,6 +215,7 @@ def main():
         help="Matrix scenario preset",
     )
     parser.add_argument("--seed", type=int, default=None, help="Random seed for repeatable random runs")
+    parser.add_argument("--relu", action="store_true", help="Enable hardware ReLU activation (+relu)")
     parser.add_argument("--show-relu", action="store_true", help="Display post-activation ReLU(E) values")
     parser.add_argument("--sim-binary", default="./top_test", help="Path to compiled iverilog executable")
     args = parser.parse_args()
@@ -223,8 +226,10 @@ def main():
     print(f"\n{BOLD}{CYAN}==================================================================={RESET}")
     print(f"{BOLD}{CYAN}      SIMPLE TENSOR CORE — QUANTIZED NEURAL NETWORK LAYER DEMO      {RESET}")
     print(f"{BOLD}{CYAN}==================================================================={RESET}")
-    print(f" Target Operation: {BOLD}E = (A x B) + D{RESET}")
+    op_desc = "E = ReLU((A x B) + D)" if args.relu else "E = (A x B) + D"
+    print(f" Target Operation: {BOLD}{op_desc}{RESET}")
     print(f" Precision Mode  : {BOLD}8-bit Signed (INT8) x INT8 -> 20-bit Accumulator{RESET}")
+    print(f" Hardware ReLU   : {BOLD}{'ENABLED (On-Chip)' if args.relu else 'DISABLED (Linear Pass)'}{RESET}")
     print(f" Scenario Preset : {BOLD}{args.preset.upper()}{RESET}\n")
 
     # 1. Generate Input Matrices
@@ -232,6 +237,8 @@ def main():
 
     # 2. Golden Reference Calculation
     E_ref = compute_golden_model(A, B, D)
+    if args.relu:
+        E_ref = [[max(0, val) for val in row] for row in E_ref]
 
     # 3. Create stimulus hex file (48 bytes: 16x A, 16x B, 16x D)
     # Note: Use a relative filename without spaces because Verilog $value$plusargs("%s")
@@ -255,7 +262,7 @@ def main():
 
         # 5. Run Hardware Simulation
         print(f"{CYAN}[*] Injecting stimulus into Verilog systolic core via {hex_filename}...{RESET}")
-        sim_stdout = run_hardware_sim(sim_binary, hex_filename, project_dir)
+        sim_stdout = run_hardware_sim(sim_binary, hex_filename, project_dir, relu=args.relu)
         hw_E = parse_sim_output(sim_stdout)
 
     finally:

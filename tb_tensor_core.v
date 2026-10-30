@@ -5,6 +5,7 @@ module tb_simple_tensor_core;
     reg clk = 0;
     reg reset, start;
     reg [1:0] mode;
+    reg relu_en = 0;
     reg [127:0] A_in, B_in, D_in;
     wire [319:0] E_out;
     wire valid, busy;
@@ -13,7 +14,7 @@ module tb_simple_tensor_core;
     integer i, j, k;
 
     simple_tensor_core dut (
-            .clk(clk), .reset(reset), .start(start), .mode(mode),
+            .clk(clk), .reset(reset), .start(start), .mode(mode), .relu_en(relu_en),
     
             .A00(A_in[7:0]),     .A01(A_in[15:8]),    .A02(A_in[23:16]),   .A03(A_in[31:24]),
             .A10(A_in[39:32]),   .A11(A_in[47:40]),   .A12(A_in[55:48]),   .A13(A_in[63:56]),
@@ -73,6 +74,7 @@ module tb_simple_tensor_core;
         integer kk;
         reg signed [31:0] acc;
         reg signed [31:0] a_val, b_val, d_val;
+        reg signed [31:0] full_res;
         begin
             for (i = 0; i < 4; i = i + 1)
                 for (j = 0; j < 4; j = j + 1) begin
@@ -98,7 +100,11 @@ module tb_simple_tensor_core;
                     else
                         d_val = {{24{D[i][j][7]}}, D[i][j]};
 
-                    expected[i][j] = (acc + d_val) & 20'hFFFFF;
+                    full_res = acc + d_val;
+                    if (relu_en && full_res < 0)
+                        expected[i][j] = 20'd0;
+                    else
+                        expected[i][j] = full_res & 20'hFFFFF;
                 end
         end
     endtask
@@ -265,6 +271,18 @@ module tb_simple_tensor_core;
             end
         end
 
+        // Test Hardware ReLU Activation Feature
+        begin : relu_activation_test
+            for (i=0;i<4;i=i+1) for (j=0;j<4;j=j+1) begin
+                A[i][j] = 100 + i*10 + j;
+                B[i][j] = 200 - i*5  - j;
+                D[i][j] = 50 + i + j;
+            end
+            relu_en = 1;
+            run_and_check(2'b10, "8-bit-relu-active");
+            relu_en = 0;
+        end
+
         if (errors == 0)
             $display("\nALL TESTS PASSED");
         else
@@ -286,7 +304,15 @@ module tb_simple_tensor_core;
                     D[i][j] = file_mem[32 + 4*i+j];
                 end
                 
+                if ($test$plusargs("relu")) begin
+                    relu_en = 1;
+                    $display(">>> HARDWARE RELU ACTIVATION ENABLED <<<");
+                end else begin
+                    relu_en = 0;
+                end
+
                 run_and_check(2'b10, "Custom-Terminal-Input");
+                relu_en = 0;
                 
                 if (errors == 0)
                     $display("CUSTOM INPUT PASSED VERIFICATION!");

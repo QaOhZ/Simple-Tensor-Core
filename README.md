@@ -967,14 +967,21 @@ flowchart LR
 #### Quickstart:
 
 ```bash
-# Run full RTL test suite (4-bit, 2-bit, 8-bit, boundary cases, spurious-start rejection)
+# Run all hardware verification suites (Base core + AXI4-Stream IP wrapper)
+make test-all
+
+# Run base RTL test suite (4-bit, 2-bit, 8-bit, boundary cases, spurious-start rejection, on-chip ReLU)
 make test
+
+# Run AXI4-Stream IP test suite with streaming backpressure verification
+make test-axis
 
 # Run interactive Quantized INT8 Neural Network Layer demonstration with Golden Model verification
 make demo
 
-# Generate and inspect simulation waveform in Surfer / GTKWave
+# Generate and inspect simulation waveforms in Surfer / GTKWave
 make wave
+make wave-axis
 
 # Clean build artifacts
 make clean
@@ -1115,15 +1122,17 @@ This project successfully bridged low-level gate logic (`full_adder`, AND-gate p
 
 Real AI accelerators are not magic, they are exactly this, scaled up: adders, multipliers, registers, multiplexers, and FSMs, arranged spatially so that data reuse (not raw clock speed) is what delivers throughput. This project proves that a scaled-down, 4×4, 4-bit-native tensor core can be built entirely from the primitive LC concepts, and that the same physical grid can be time-multiplexed to support higher precisions without duplicating hardware.
 
-### 4.3 Limitations & Future Expansion
+### 4.3 Implemented Extensions & Future Expansion
 
-Hardware is never "finished." To turn this execution unit into part of a real System-on-Chip, the following would be needed next:
+The core architecture has been extended to support real-world SoC deployment:
 
-- **Activation function support:** add a hardware ReLU module downstream of `E_out`, since real neural-network layers apply an activation immediately after the matrix-multiply-add.
-- **Bus protocol wrapping:** wrap `simple_tensor_core`'s custom `start`/`busy`/`valid` handshake in a standard interconnect protocol so a real CPU or DMA engine could drive it without a custom driver.
-- **Memory hierarchy:** add an SRAM-backed global buffer in front of `A_in`/`B_in`/`D_in` so that larger-than-4×4 matrices could be tiled and streamed in, rather than requiring the entire operand set to be presented on the input bus at once, this would remove the current design's implicit assumption that all 128 bits of each operand are available simultaneously, and would prevent memory-bandwidth bottlenecks as matrix sizes grow.
-- **Deeper pipelining of the 8-bit recombination path:** per the timing analysis in 3.5, the `io_manager` combine chain is the actual critical path; splitting `add1→add2→add3→add4` across two pipeline stages would very likely raise $f_{max}$ without touching the systolic grid at all.
-- **Parametrization:** generalize the 4×4, 4-bit-native grid size and native width to Verilog parameters, so the same RTL could scale to 8×8 or 16-bit-native without hand-editing every module.
+- **Hardware Activation Unit (`activation_unit`):** Implemented an on-chip, zero-cycle ReLU unit (`relu_en`) downstream of the accumulator outputs. When asserted, negative accumulator values are clamped to 0, directly executing $E = \text{ReLU}(A \times B + D)$.
+- **AXI4-Stream Protocol Wrapper (`axis_tensor_core`):** Implemented an industry-standard 32-bit AXI4-Stream IP wrapper. Provides streaming packet framing with `tvalid`, `tready`, `tlast` handshakes and backpressure management, allowing the core to connect directly to standard DMA engines and SoC interconnects.
+
+#### Future Scope:
+- **Memory hierarchy:** add an SRAM-backed global buffer in front of `A_in`/`B_in`/`D_in` so that larger-than-4×4 matrices could be tiled and streamed in, rather than requiring the entire operand set to be presented on the input bus at once.
+- **Deeper pipelining of the 8-bit recombination path:** per the timing analysis in 3.5, the `io_manager` combine chain is the actual critical path; splitting `add1→add2→add3→add4` across two pipeline stages would raise $f_{max}$.
+- **Parametrization:** generalize the 4×4 grid size and native width to Verilog parameters.
 
 ---
 
@@ -1147,6 +1156,8 @@ Hardware is never "finished." To turn this execution unit into part of a real Sy
 | 14  | `adder_20bit`        | Final (support) | Comb.      | `A[19:0],B[19:0],Cin → Sum[19:0],Cout`                                                                                                  | 5× `carry_adder_4bit`; used for 8-bit partial-product recombination                         |
 | 15  | `data_ctrl_unit`     | Final           | Seq. (FSM) | `clk,reset,start,mode[1:0] → core_reset,core_start,pass_idx[1:0],capture_en,combine_en,valid,busy,idle`                                 | 6-state FSM controlling single-pass vs. 4-pass (8-bit) operation                            |
 | 16  | `io_manager`         | Final           | Seq.+Comb. | `clk,reset,latch_en,mode,A_in/B_in/D_in[127:0],pass_idx,capture_en,combine_en,core_E_flat[191:0] → core_A/B/D_flat[63:0], E_out[319:0]` | Precision muxing (`operand_nibble`), partial-product capture, 8-bit shift-add recombination |
-| 17  | `simple_tensor_core` | Final           | Top-level  | `clk,reset,start,mode[1:0],A_in,B_in,D_in[127:0] → E_out[319:0],valid,busy`                                                             | Wires `data_ctrl_unit` + `io_manager` + `tensor_module` together                            |
+| 17  | `activation_unit`    | Final (support) | Comb.      | `relu_en, in_val[19:0] → out_val[19:0]`                                                                                                 | Signed clamping to 0 on negative inputs when `relu_en` is active                            |
+| 18  | `simple_tensor_core` | Final           | Top-level  | `clk,reset,start,mode[1:0],relu_en,A_in,B_in,D_in[127:0] → E_out[319:0],valid,busy`                                                     | Wires FSM + `io_manager` + `tensor_module` + activation unit                                |
+| 19  | `axis_tensor_core`   | Extension       | SoC Wrapper| `clk,aresetn,cfg_mode,cfg_relu_en,s_axis_*,m_axis_*`                                                                                     | 32-bit AXI4-Stream IP wrapper with buffering and backpressure handling                      |
 
 ---

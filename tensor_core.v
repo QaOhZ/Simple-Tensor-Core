@@ -591,9 +591,20 @@ module io_manager(
     assign E_out = E_reg;
 endmodule
 
+module activation_unit (
+    input         relu_en,
+    input  [19:0] in_val,
+    output [19:0] out_val
+);
+    // In 20-bit two's complement, bit 19 is the sign bit.
+    // If ReLU is enabled and in_val is negative, clamp to 0; otherwise pass in_val.
+    assign out_val = (relu_en && in_val[19]) ? 20'sd0 : in_val;
+endmodule
+
 module simple_tensor_core(
     input         clk, reset, start,
     input  [1:0]  mode,
+    input         relu_en,
 
     input  [7:0]  A00, A01, A02, A03,
     input  [7:0]  A10, A11, A12, A13,
@@ -634,7 +645,20 @@ module simple_tensor_core(
     wire [127:0] B_in = {B33,B32,B31,B30, B23,B22,B21,B20, B13,B12,B11,B10, B03,B02,B01,B00};
     wire [127:0] D_in = {D33,D32,D31,D30, D23,D22,D21,D20, D13,D12,D11,D10, D03,D02,D01,D00};
 
+    wire [319:0] E_raw;
     wire [319:0] E_out;
+
+    genvar act_i;
+    generate
+        for (act_i = 0; act_i < 16; act_i = act_i + 1) begin : gen_act
+            activation_unit act_u (
+                .relu_en(relu_en),
+                .in_val(E_raw[20*act_i +: 20]),
+                .out_val(E_out[20*act_i +: 20])
+            );
+        end
+    endgenerate
+
     assign {E33,E32,E31,E30, E23,E22,E21,E20, E13,E12,E11,E10, E03,E02,E01,E00} = E_out;
 
     data_ctrl_unit ctrl (
@@ -654,7 +678,7 @@ module simple_tensor_core(
         .capture_en(capture_en), .combine_en(combine_en),
         .core_E_flat(core_E_flat),
         .core_A_flat(core_A_flat), .core_B_flat(core_B_flat), .core_D_flat(core_D_flat),
-        .E_out(E_out)
+        .E_out(E_raw)
     );
 
     tensor_module core (
