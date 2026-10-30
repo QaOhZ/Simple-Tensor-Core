@@ -1,0 +1,35 @@
+# Generated simulation and test binaries
+*_test
+*.out
+*.vvp
+
+# Waveform simulation dumps
+*.vcd
+
+# Backup directories and files
+bak/
+*.bak
+*~
+
+# Archives and submission packages
+*.zip
+*.tar.gz
+
+# Document generation and duplicates
+Simple Tensor Core.md
+*.pdf
+
+# Node / npm files
+package.json
+package-lock.json
+node_modules/
+
+# Legacy root images moved to figures/
+adder_4_bit.png
+carry_adder_4_bit.png
+
+# OS and Editor artifacts
+.DS_Store
+*.swp
+.vscode/
+.idea/
