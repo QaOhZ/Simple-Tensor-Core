@@ -1,0 +1,43 @@
+name: Simple Tensor Core CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: RTL Verification & ML Demo
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install EDA Tools & Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog python3
+
+      - name: Display Toolchain Information
+        run: |
+          echo "=== Icarus Verilog Version ==="
+          iverilog -v || true
+          echo "=== Python Version ==="
+          python3 --version
+
+      - name: Run Full Hardware RTL Testbench
+        run: make test
+
+      - name: Run Quantized Neural Network Layer Demos
+        run: |
+          echo "==> Running MLP Preset Demo..."
+          make demo
+          echo "==> Running Edge Detection Kernel Preset..."
+          python3 demo_mlp_layer.py --preset=edge
+          echo "==> Running Identity Preset..."
+          python3 demo_mlp_layer.py --preset=identity
+          echo "==> Running Constrained Random Verification..."
+          python3 demo_mlp_layer.py --preset=random --seed=42

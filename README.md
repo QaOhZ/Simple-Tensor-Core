@@ -1,5 +1,7 @@
 # Simple Tensor Core
 
+[![CI](https://github.com/QaOhZ/Simple-Tensor-Core/actions/workflows/ci.yml/badge.svg)](https://github.com/QaOhZ/Simple-Tensor-Core/actions/workflows/ci.yml)
+
 **Sepehr Hesampour**
 
 **Target Equation:** `E = A × B + D` (4×4 matrices, 2-bit / 4-bit / 8-bit precision)
@@ -956,10 +958,27 @@ flowchart LR
 
 ## 3. Testing & Verification
 
-### 3.1 Simulation Toolchain
+### 3.1 Simulation Toolchain & Quickstart
 
-- **Compiler / simulator:** Icarus Verilog.
-- **Waveform viewer:** Surfer.
+- **Compiler / simulator:** Icarus Verilog (`iverilog`, `vvp`).
+- **Waveform viewer:** Surfer / GTKWave.
+- **Python Golden Model & Demo:** Python 3 (`demo_mlp_layer.py`).
+
+#### Quickstart:
+
+```bash
+# Run full RTL test suite (4-bit, 2-bit, 8-bit, boundary cases, spurious-start rejection)
+make test
+
+# Run interactive Quantized INT8 Neural Network Layer demonstration with Golden Model verification
+make demo
+
+# Generate and inspect simulation waveform in Surfer / GTKWave
+make wave
+
+# Clean build artifacts
+make clean
+```
 
 ### 3.2 Bottom-Up Test Strategy
 

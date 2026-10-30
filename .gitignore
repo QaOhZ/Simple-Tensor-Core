@@ -6,6 +6,14 @@
 # Waveform simulation dumps
 *.vcd
 
+# Simulation stimulus files
+*.hex
+.stimulus_*.hex
+
+# Python bytecode and caches
+__pycache__/
+*.pyc
+
 # Backup directories and files
 bak/
 *.bak
